@@ -2,9 +2,10 @@
 import type { Booking } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { CalendarDays, Clock, Film, MapPin, Trash2, Users, TicketIcon } from 'lucide-react';
+import { CalendarDays, Clock, Film, MapPin, Trash2, Users, TicketIcon, Edit3 } from 'lucide-react';
 import { formatDateTime } from '@/lib/data';
-import Image from 'next/image'; // Assuming you might add movie poster later
+import Image from 'next/image';
+import Link from 'next/link';
 
 interface BookingCardProps {
   booking: Booking;
@@ -13,10 +14,8 @@ interface BookingCardProps {
 }
 
 export default function BookingCard({ booking, onCancelBooking, isCancelling }: BookingCardProps) {
-  // For demonstration, let's assume a placeholder image or fetch it if available
   const posterUrl = `https://placehold.co/150x225.png?text=${encodeURIComponent(booking.movieTitle)}`;
-
-  const canCancel = new Date(booking.showtimeDateTime) > new Date(); // Simplistic check: can cancel if showtime is in future
+  const canModifyOrCancel = new Date(booking.showtimeDateTime) > new Date();
 
   return (
     <Card className="overflow-hidden shadow-lg flex flex-col md:flex-row">
@@ -44,18 +43,26 @@ export default function BookingCard({ booking, onCancelBooking, isCancelling }: 
             <p className="flex items-center"><Clock size={16} className="mr-2 text-accent" /> Booked On: <span className="font-semibold ml-1">{formatDateTime(booking.bookingTime)}</span></p>
           </div>
         </CardContent>
-        <CardFooter className="border-t p-4">
-          {canCancel ? (
-            <Button 
-              variant="destructive" 
-              onClick={() => onCancelBooking(booking.id)}
-              disabled={isCancelling}
-              className="w-full sm:w-auto"
-            >
-              <Trash2 size={16} className="mr-2" /> {isCancelling ? 'Cancelling...' : 'Cancel Booking'}
-            </Button>
+        <CardFooter className="border-t p-4 flex flex-col sm:flex-row justify-end gap-2">
+          {canModifyOrCancel ? (
+            <>
+              <Link href={`/movies/${booking.movieId}/book?showtimeId=${booking.showtimeId}&bookingId=${booking.id}&modify=true`}>
+                <Button variant="outline" size="sm" className="w-full sm:w-auto">
+                  <Edit3 size={16} className="mr-2" /> Modify Seats
+                </Button>
+              </Link>
+              <Button 
+                variant="destructive" 
+                size="sm"
+                onClick={() => onCancelBooking(booking.id)}
+                disabled={isCancelling}
+                className="w-full sm:w-auto"
+              >
+                <Trash2 size={16} className="mr-2" /> {isCancelling ? 'Cancelling...' : 'Cancel Booking'}
+              </Button>
+            </>
           ) : (
-            <p className="text-sm text-muted-foreground">This booking can no longer be cancelled.</p>
+            <p className="text-sm text-muted-foreground w-full text-center sm:text-right">This booking can no longer be modified or cancelled.</p>
           )}
         </CardFooter>
       </div>

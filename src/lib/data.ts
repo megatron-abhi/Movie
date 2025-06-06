@@ -119,13 +119,14 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'bookingTi
   if (showtime.availableSeats < bookingData.selectedSeats.length) {
     throw new Error('Not enough seats available');
   }
-  showtime.availableSeats -= bookingData.selectedSeats.length;
-  // In a real app, update the movieStore with the new showtime availability
+  
+  // In a real app, this would be a transactional update.
+  // For mock, directly update the moviesStore.
   const movieIndex = moviesStore.findIndex(m => m.id === movie.id);
   if (movieIndex !== -1) {
     const showtimeIndex = moviesStore[movieIndex].showtimes.findIndex(st => st.id === showtime.id);
     if (showtimeIndex !== -1) {
-      moviesStore[movieIndex].showtimes[showtimeIndex].availableSeats = showtime.availableSeats;
+      moviesStore[movieIndex].showtimes[showtimeIndex].availableSeats -= bookingData.selectedSeats.length;
     }
   }
 
@@ -139,6 +140,36 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'bookingTi
   bookingsStore.push(newBooking);
   return JSON.parse(JSON.stringify(newBooking));
 };
+
+export const getBookingById = async (bookingId: string): Promise<Booking | undefined> => {
+  await new Promise(resolve => setTimeout(resolve, 50));
+  return JSON.parse(JSON.stringify(bookingsStore.find(b => b.id === bookingId)));
+};
+
+export const modifyBookingSeats = async (bookingId: string, userId: string, newSeats: string[]): Promise<Booking | null> => {
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const bookingIndex = bookingsStore.findIndex(b => b.id === bookingId && b.userId === userId);
+  if (bookingIndex === -1) {
+    throw new Error("Booking not found or user mismatch.");
+  }
+
+  const originalBooking = bookingsStore[bookingIndex];
+  if (newSeats.length !== originalBooking.selectedSeats.length) {
+    throw new Error("The number of seats must remain the same when modifying.");
+  }
+
+  // In a real system, you'd also verify that the newSeats are available for the showtime
+  // and atomically update showtime seat availability. For this mock, we assume the
+  // SeatSelector component has already validated this based on current availability
+  // (excluding the user's original seats). The availableSeats count in moviesStore
+  // does not change as the number of tickets held by the user is constant.
+
+  bookingsStore[bookingIndex].selectedSeats = newSeats;
+  bookingsStore[bookingIndex].bookingTime = new Date().toISOString(); // Update booking time to reflect modification
+
+  return JSON.parse(JSON.stringify(bookingsStore[bookingIndex]));
+};
+
 
 export const getUserBookings = async (userId: string): Promise<Booking[]> => {
   await new Promise(resolve => setTimeout(resolve, 100));
@@ -157,22 +188,15 @@ export const cancelBooking = async (bookingId: string, userId: string): Promise<
 
   const booking = bookingsStore[bookingIndex];
   
-  // Restore seats
-  const movie = moviesStore.find(m => m.id === booking.movieId);
-  if (movie) {
-    const showtime = movie.showtimes.find(st => st.id === booking.showtimeId);
-    if (showtime) {
-      showtime.availableSeats += booking.selectedSeats.length;
-      if (showtime.availableSeats > showtime.totalSeats) {
-        showtime.availableSeats = showtime.totalSeats; // cap at total seats
-      }
-       // In a real app, update the movieStore with the new showtime availability
-      const movieIndexStore = moviesStore.findIndex(m => m.id === movie.id);
-      if (movieIndexStore !== -1) {
-        const showtimeIndexStore = moviesStore[movieIndexStore].showtimes.findIndex(st => st.id === showtime.id);
-        if (showtimeIndexStore !== -1) {
-          moviesStore[movieIndexStore].showtimes[showtimeIndexStore].availableSeats = showtime.availableSeats;
-        }
+  // Restore seats to moviesStore
+  const movieIndex = moviesStore.findIndex(m => m.id === booking.movieId);
+  if (movieIndex !== -1) {
+    const showtimeIndex = moviesStore[movieIndex].showtimes.findIndex(st => st.id === booking.showtimeId);
+    if (showtimeIndex !== -1) {
+      moviesStore[movieIndex].showtimes[showtimeIndex].availableSeats += booking.selectedSeats.length;
+      // Ensure availableSeats does not exceed totalSeats
+      if (moviesStore[movieIndex].showtimes[showtimeIndex].availableSeats > moviesStore[movieIndex].showtimes[showtimeIndex].totalSeats) {
+        moviesStore[movieIndex].showtimes[showtimeIndex].availableSeats = moviesStore[movieIndex].showtimes[showtimeIndex].totalSeats;
       }
     }
   }

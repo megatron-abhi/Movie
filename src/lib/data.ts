@@ -174,6 +174,8 @@ export const deleteMovie = async (id: string): Promise<boolean> => {
   await new Promise(resolve => setTimeout(resolve, 100));
   const initialLength = moviesStore.length;
   moviesStore = moviesStore.filter(movie => movie.id !== id);
+  // Also remove associated bookings for deleted movies if desired, or handle as "movie not found"
+  // bookingsStore = bookingsStore.filter(booking => booking.movieId !== id);
   return moviesStore.length < initialLength;
 };
 
@@ -181,31 +183,51 @@ export const deleteMovie = async (id: string): Promise<boolean> => {
 // Booking Management
 export const createBooking = async (bookingData: Omit<Booking, 'id' | 'bookingTime' | 'totalPrice' | 'theatreName'>): Promise<Booking> => {
   await new Promise(resolve => setTimeout(resolve, 100));
-  const movie = await getMovieById(bookingData.movieId); // This will have populated showtimes
-  if (!movie) throw new Error('Movie not found');
-  const showtime = movie.showtimes.find(st => st.id === bookingData.showtimeId);
-  if (!showtime) throw new Error('Showtime not found');
-  if (!showtime.theatreName) throw new Error('Theatre name missing for showtime.');
+  
+  // Use movieTitle from bookingData if provided, otherwise fetch
+  let finalMovieTitle = bookingData.movieTitle;
+  if (!finalMovieTitle && bookingData.movieId) {
+    const movie = await getMovieById(bookingData.movieId);
+    if (!movie || !movie.title) throw new Error('Movie or movie title not found');
+    finalMovieTitle = movie.title;
+  } else if (!finalMovieTitle) {
+     throw new Error('Movie title is missing in booking data and cannot be fetched.');
+  }
 
+  const movieForShowtimeCheck = await getMovieById(bookingData.movieId);
+  if (!movieForShowtimeCheck) throw new Error('Movie not found for showtime validation');
+  
+  const showtime = movieForShowtimeCheck.showtimes.find(st => st.id === bookingData.showtimeId);
+  if (!showtime) throw new Error('Showtime not found');
+
+  if (!bookingData.theatreId) {
+    throw new Error("Theatre ID is missing in booking data.");
+  }
+  const theatre = await getTheatreById(bookingData.theatreId);
+  if (!theatre || !theatre.name) throw new Error('Theatre or theatre name not found for booking.');
 
   if (showtime.availableSeats < bookingData.selectedSeats.length) {
     throw new Error('Not enough seats available');
   }
   
-  const movieIndexOriginal = moviesStore.findIndex(m => m.id === movie.id);
+  const movieIndexOriginal = moviesStore.findIndex(m => m.id === bookingData.movieId);
   if (movieIndexOriginal !== -1) {
-    const showtimeIndexOriginal = moviesStore[movieIndexOriginal].showtimes.findIndex(st => st.id === showtime.id);
+    const showtimeIndexOriginal = moviesStore[movieIndexOriginal].showtimes.findIndex(st => st.id === bookingData.showtimeId);
     if (showtimeIndexOriginal !== -1) {
       moviesStore[movieIndexOriginal].showtimes[showtimeIndexOriginal].availableSeats -= bookingData.selectedSeats.length;
     }
   }
 
   const newBooking: Booking = {
-    ...bookingData,
+    // Spread bookingData first, so finalMovieTitle and theatre.name can overwrite if necessary
+    // or ensure bookingData doesn't have these if they are always derived here.
+    // For this case, bookingData already includes movieTitle.
+    ...bookingData, 
     id: String(Date.now() + Math.random()),
+    movieTitle: finalMovieTitle, // Ensure we use the determined movie title
     bookingTime: new Date().toISOString(),
     totalPrice: bookingData.selectedSeats.length * 15, 
-    theatreName: showtime.theatreName, // Get populated theatreName
+    theatreName: theatre.name, // Stored at booking time from the fetched theatre
   };
   bookingsStore.push(newBooking);
   return JSON.parse(JSON.stringify(newBooking));
@@ -216,18 +238,22 @@ export const getBookingById = async (bookingId: string): Promise<Booking | undef
   const booking = bookingsStore.find(b => b.id === bookingId);
   if (!booking) return undefined;
   
-  // Ensure theatreName is populated if it wasn't (e.g. older bookings before refactor)
-  // This part is mostly for robustness if data could be inconsistent.
-  // For newly created bookings, theatreName is already set.
-  if (!booking.theatreName && booking.theatreId) {
-      const theatre = await getTheatreById(booking.theatreId);
-      if (theatre) {
-          booking.theatreName = theatre.name;
-      } else {
-          booking.theatreName = "Unknown Theatre";
-      }
+  const bCopy = { ...booking };
+  // Fallback for older data potentially missing theatreName
+  if ((!bCopy.theatreName || bCopy.theatreName.trim() === '') && bCopy.theatreId) {
+      const theatre = await getTheatreById(bCopy.theatreId);
+      bCopy.theatreName = theatre ? theatre.name : "N/A";
+  } else if (!bCopy.theatreName) {
+      bCopy.theatreName = "N/A";
   }
-  return JSON.parse(JSON.stringify(booking));
+   // Fallback for older data potentially missing movieTitle
+  if ((!bCopy.movieTitle || bCopy.movieTitle.trim() === '') && bCopy.movieId) {
+      const movie = await getMovieById(bCopy.movieId);
+      bCopy.movieTitle = movie ? movie.title : "N/A";
+  } else if (!bCopy.movieTitle) {
+      bCopy.movieTitle = "N/A";
+  }
+  return JSON.parse(JSON.stringify(bCopy));
 };
 
 export const modifyBookingSeats = async (bookingId: string, userId: string, newSeats: string[]): Promise<Booking | null> => {
@@ -242,6 +268,8 @@ export const modifyBookingSeats = async (bookingId: string, userId: string, newS
     throw new Error("The number of seats must remain the same when modifying.");
   }
 
+  // No change to available seats in theatre as total # of seats booked remains same.
+  // Just update selected seats and booking time.
   bookingsStore[bookingIndex].selectedSeats = newSeats;
   bookingsStore[bookingIndex].bookingTime = new Date().toISOString(); 
 
@@ -252,11 +280,20 @@ export const modifyBookingSeats = async (bookingId: string, userId: string, newS
 export const getUserBookings = async (userId: string): Promise<Booking[]> => {
   await new Promise(resolve => setTimeout(resolve, 100));
   const userBookings = bookingsStore.filter(booking => booking.userId === userId);
-  // Populate theatre names for display if necessary
-  const populatedUserBookings = await Promise.all(userBookings.map(async b => {
-    if (!b.theatreName && b.theatreId) {
+  
+  const populatedUserBookings = await Promise.all(userBookings.map(async booking => {
+    const b = { ...booking };
+    if ((!b.theatreName || b.theatreName.trim() === '') && b.theatreId) {
       const theatre = await getTheatreById(b.theatreId);
-      return { ...b, theatreName: theatre ? theatre.name : "Unknown Theatre" };
+      b.theatreName = theatre ? theatre.name : "N/A";
+    } else if (!b.theatreName) {
+      b.theatreName = "N/A";
+    }
+    if ((!b.movieTitle || b.movieTitle.trim() === '') && b.movieId) {
+        const movie = await getMovieById(b.movieId);
+        b.movieTitle = movie ? movie.title : "N/A";
+    } else if (!b.movieTitle) {
+        b.movieTitle = "N/A";
     }
     return b;
   }));
@@ -265,14 +302,31 @@ export const getUserBookings = async (userId: string): Promise<Booking[]> => {
 
 export const getAllBookings = async (): Promise<Booking[]> => {
   await new Promise(resolve => setTimeout(resolve, 100));
-   const populatedBookings = await Promise.all(bookingsStore.map(async b => {
-    if (!b.theatreName && b.theatreId) {
+  // Prioritize already stored movieTitle and theatreName on the booking.
+  // Fallback to fetching only if they are missing, to ensure data from time of booking is kept.
+  const processedBookings = await Promise.all(bookingsStore.map(async (booking) => {
+    const b = { ...booking }; // Work with a copy
+
+    // If theatreName is effectively missing, and theatreId exists, try to populate it.
+    if ((!b.theatreName || b.theatreName.trim() === '') && b.theatreId) {
       const theatre = await getTheatreById(b.theatreId);
-      return { ...b, theatreName: theatre ? theatre.name : "Unknown Theatre" };
+      b.theatreName = theatre?.name || 'N/A (Theatre Lookup Failed)';
+    } else if (!b.theatreName || b.theatreName.trim() === '') {
+      // If theatreName is missing and no theatreId to look up
+      b.theatreName = 'N/A (No Theatre Info)';
+    }
+
+    // If movieTitle is effectively missing, and movieId exists, try to populate it.
+    if ((!b.movieTitle || b.movieTitle.trim() === '') && b.movieId) {
+        const movie = await getMovieById(b.movieId);
+        b.movieTitle = movie?.title || 'N/A (Movie Lookup Failed)';
+    } else if (!b.movieTitle || b.movieTitle.trim() === '') {
+      // If movieTitle is missing and no movieId to look up
+        b.movieTitle = 'N/A (No Movie Info)';
     }
     return b;
   }));
-  return JSON.parse(JSON.stringify(populatedBookings));
+  return JSON.parse(JSON.stringify(processedBookings));
 }
 
 export const cancelBooking = async (bookingId: string, userId: string): Promise<boolean> => {
@@ -325,3 +379,4 @@ export const formatDateTime = (dateString: string) => {
     return "Invalid Date/Time";
   }
 }
+

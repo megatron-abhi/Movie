@@ -5,14 +5,19 @@ export interface Seat {
   isSelected?: boolean;
 }
 
+export interface Theatre {
+  id: string;
+  name: string;
+  location?: string; // Optional field for more details
+}
+
 export interface Showtime {
   id: string;
   dateTime: string; // ISO string
-  theatreName: string;
-  availableSeats: number; // Simple count for now
+  theatreId: string; // Changed from theatreName
+  theatreName?: string; // For display purposes, populated from Theatre store
+  availableSeats: number; 
   totalSeats: number;
-  // For more complex seat selection:
-  // seatLayout?: Seat[][]; 
 }
 
 export interface Movie {
@@ -36,7 +41,8 @@ export interface Booking {
   movieTitle: string;
   showtimeId: string;
   showtimeDateTime: string; // ISO string
-  theatreName: string;
+  theatreId: string;
+  theatreName: string; // This will be populated from the Theatre store via showtime
   selectedSeats: string[]; // e.g., ["A1", "A2"]
   bookingTime: string; // ISO string
   totalPrice: number;
@@ -48,10 +54,14 @@ export interface User {
   id: string;
   username: string;
   role: UserRole;
-  // password field should not be stored or passed around in frontend models
 }
 
 // For forms
-export type MovieFormData = Omit<Movie, 'id' | 'showtimes'> & {
-  showtimes: Array<Omit<Showtime, 'id' | 'availableSeats' | 'totalSeats'> & { totalSeatsInput?: number }>;
+export type MovieFormData = Omit<Movie, 'id' | 'showtimes' | 'posterUrl'> & {
+  posterUrl?: string; // Make optional as it can be auto-generated
+  showtimes: Array<Omit<Showtime, 'id' | 'availableSeats' | 'totalSeats' | 'theatreName'> & { 
+    totalSeatsInput?: number; // Used in form
+  }>;
 };
+
+export type TheatreFormData = Omit<Theatre, 'id'>;

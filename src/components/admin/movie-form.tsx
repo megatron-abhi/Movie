@@ -1,5 +1,6 @@
+
 "use client";
-import type { Movie, MovieFormData, Showtime } from '@/lib/types';
+import type { Movie, MovieFormData, Showtime, Theatre } from '@/lib/types';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -8,15 +9,18 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CalendarIcon, ClockIcon, PlusCircle, Trash2, Film } from 'lucide-react';
+import { CalendarIcon, PlusCircle, Trash2, Film, Loader2 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from "date-fns";
+import { useEffect, useState } from 'react';
+import { getTheatres } from '@/lib/data'; // To fetch theatres
 
 const showtimeSchema = z.object({
   dateTime: z.string().refine(val => !isNaN(Date.parse(val)), { message: "Invalid date/time" }),
-  theatreName: z.string().min(1, "Theatre name is required"),
+  theatreId: z.string().min(1, "Theatre is required"),
   totalSeatsInput: z.coerce.number().int().min(1, "Total seats must be at least 1"),
 });
 
@@ -30,18 +34,37 @@ const movieFormSchema = z.object({
   director: z.string().min(1, "Director is required"),
   cast: z.string().min(1, "Cast required, comma separated").transform(val => val.split(',').map(c => c.trim())),
   rating: z.coerce.number().min(0).max(5, "Rating must be between 0 and 5"),
-  showtimes: z.array(showtimeSchema).min(0, "At least one showtime is recommended"),
+  showtimes: z.array(showtimeSchema).min(0), // Removed min(1) to allow movies without showtimes initially
 });
 
 type MovieFormValues = z.infer<typeof movieFormSchema>;
 
 interface MovieFormProps {
-  movie?: Movie; // For editing
+  movie?: Movie; 
   onSubmit: (data: MovieFormData) => Promise<void>;
   isSubmitting: boolean;
 }
 
 export default function MovieForm({ movie, onSubmit, isSubmitting }: MovieFormProps) {
+  const [theatres, setTheatres] = useState<Theatre[]>([]);
+  const [isLoadingTheatres, setIsLoadingTheatres] = useState(true);
+
+  useEffect(() => {
+    async function fetchTheatresData() {
+      setIsLoadingTheatres(true);
+      try {
+        const theatreData = await getTheatres();
+        setTheatres(theatreData);
+      } catch (error) {
+        console.error("Failed to fetch theatres for form", error);
+        // Potentially set an error state or show a toast
+      } finally {
+        setIsLoadingTheatres(false);
+      }
+    }
+    fetchTheatresData();
+  }, []);
+  
   const defaultValues = movie ? {
     ...movie,
     genre: movie.genre.join(', '),
@@ -50,7 +73,7 @@ export default function MovieForm({ movie, onSubmit, isSubmitting }: MovieFormPr
     releaseDate: movie.releaseDate ? format(parseISO(movie.releaseDate), "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"),
     showtimes: movie.showtimes.map(st => ({
       dateTime: st.dateTime ? format(parseISO(st.dateTime), "yyyy-MM-dd'T'HH:mm") : format(new Date(), "yyyy-MM-dd'T'HH:mm"),
-      theatreName: st.theatreName,
+      theatreId: st.theatreId,
       totalSeatsInput: st.totalSeats,
     })) || [],
   } : {
@@ -68,7 +91,7 @@ export default function MovieForm({ movie, onSubmit, isSubmitting }: MovieFormPr
   
   const form = useForm<MovieFormValues>({
     resolver: zodResolver(movieFormSchema),
-    defaultValues: defaultValues as MovieFormValues, // Cast needed due to transform
+    defaultValues: defaultValues as MovieFormValues,
   });
 
   const { fields, append, remove } = useFieldArray({
@@ -81,15 +104,24 @@ export default function MovieForm({ movie, onSubmit, isSubmitting }: MovieFormPr
     const movieDataSubmit: MovieFormData = {
       ...data,
       posterUrl: poster,
-      releaseDate: new Date(data.releaseDate).toISOString(), // ensure ISO string
+      releaseDate: new Date(data.releaseDate).toISOString(),
       showtimes: data.showtimes.map(st => ({
         dateTime: new Date(st.dateTime).toISOString(),
-        theatreName: st.theatreName,
+        theatreId: st.theatreId,
         totalSeats: st.totalSeatsInput,
       })),
     };
     onSubmit(movieDataSubmit);
   };
+
+  if (isLoadingTheatres) {
+    return (
+      <div className="flex justify-center items-center min-h-[200px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2">Loading theatre data...</p>
+      </div>
+    );
+  }
 
   return (
     <Card className="shadow-xl">
@@ -197,7 +229,7 @@ export default function MovieForm({ movie, onSubmit, isSubmitting }: MovieFormPr
                   >
                     <Trash2 size={18} />
                   </Button>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                   <div>
                     <Label htmlFor={`showtimes.${index}.dateTime`}>Date & Time</Label>
                     <Input
@@ -209,13 +241,25 @@ export default function MovieForm({ movie, onSubmit, isSubmitting }: MovieFormPr
                     {form.formState.errors.showtimes?.[index]?.dateTime && <p className="text-sm text-destructive mt-1">{form.formState.errors.showtimes[index]?.dateTime?.message}</p>}
                   </div>
                   <div>
-                    <Label htmlFor={`showtimes.${index}.theatreName`}>Theatre Name</Label>
-                    <Input
-                      id={`showtimes.${index}.theatreName`}
-                      {...form.register(`showtimes.${index}.theatreName`)}
-                      className="mt-1"
-                    />
-                    {form.formState.errors.showtimes?.[index]?.theatreName && <p className="text-sm text-destructive mt-1">{form.formState.errors.showtimes[index]?.theatreName?.message}</p>}
+                    <Label htmlFor={`showtimes.${index}.theatreId`}>Theatre</Label>
+                     <Controller
+                        control={form.control}
+                        name={`showtimes.${index}.theatreId`}
+                        render={({ field: controllerField }) => (
+                          <Select onValueChange={controllerField.onChange} defaultValue={controllerField.value} value={controllerField.value}>
+                            <SelectTrigger className="mt-1">
+                              <SelectValue placeholder="Select a theatre" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {theatres.length === 0 && <SelectItem value="loading" disabled>Loading theatres...</SelectItem>}
+                              {theatres.map(t => (
+                                <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    {form.formState.errors.showtimes?.[index]?.theatreId && <p className="text-sm text-destructive mt-1">{form.formState.errors.showtimes[index]?.theatreId?.message}</p>}
                   </div>
                   <div>
                     <Label htmlFor={`showtimes.${index}.totalSeatsInput`}>Total Seats</Label>
@@ -233,14 +277,19 @@ export default function MovieForm({ movie, onSubmit, isSubmitting }: MovieFormPr
             <Button
               type="button"
               variant="outline"
-              onClick={() => append({ dateTime: format(new Date(), "yyyy-MM-dd'T'HH:mm"), theatreName: '', totalSeatsInput: 100 })}
+              onClick={() => append({ dateTime: format(new Date(), "yyyy-MM-dd'T'HH:mm"), theatreId: '', totalSeatsInput: 100 })}
               className="flex items-center"
+              disabled={isLoadingTheatres || theatres.length === 0}
             >
               <PlusCircle size={18} className="mr-2" /> Add Showtime
             </Button>
+            {theatres.length === 0 && !isLoadingTheatres && (
+                <p className="text-sm text-destructive">No theatres available. Please <Link href="/admin/theatres/add" className="underline">add a theatre</Link> first.</p>
+            )}
           </div>
 
-          <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isSubmitting}>
+          <Button type="submit" className="w-full bg-primary hover:bg-primary/90" disabled={isSubmitting || isLoadingTheatres}>
+             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {isSubmitting ? (movie ? 'Updating...' : 'Adding...') : (movie ? 'Save Changes' : 'Add Movie')}
           </Button>
         </form>

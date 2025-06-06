@@ -1,14 +1,15 @@
+
 "use client";
 import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter, useParams } from 'next/navigation';
-import type { Movie, Showtime, Booking } from '@/lib/types';
-import { getMovieById, createBooking, formatDate, formatTime, getBookingById, modifyBookingSeats } from '@/lib/data';
+import type { Movie, Showtime, Booking, Theatre } from '@/lib/types';
+import { getMovieById, createBooking, formatDate, formatTime, getBookingById, modifyBookingSeats, getTheatreById } from '@/lib/data';
 import { useAuth } from '@/context/auth-context';
 import SeatSelector from '@/components/movies/seat-selector';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Loader2, Ticket, CalendarDays, Clock, MapPin, Users, AlertCircle, ArrowLeft, Edit3 } from 'lucide-react';
+import { Loader2, Ticket, CalendarDays, Clock, MapPin, AlertCircle, ArrowLeft, Edit3 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import Link from 'next/link';
 
@@ -46,7 +47,7 @@ function BookingPageContents() {
       setIsLoading(true);
       setError(null);
       try {
-        const movieData = await getMovieById(movieId);
+        const movieData = await getMovieById(movieId); // This now populates theatreName in showtimes
         if (!movieData) {
           setError("Movie not found.");
           setIsLoading(false);
@@ -68,20 +69,11 @@ function BookingPageContents() {
             setOriginalBooking(bookingData);
             setSelectedSeats(bookingData.selectedSeats);
             setOriginalSeatCount(bookingData.selectedSeats.length);
-            // Adjust showtime for SeatSelector: make user's old seats appear available during selection process.
-            // The actual availableSeats count in the datastore isn't changed by this UI adjustment.
-            const adjustedShowtime = {
-              ...showtimeData,
-              // This makes the user's current seats part of the "available" pool for the selector UI
-              // availableSeats: showtimeData.availableSeats + bookingData.selectedSeats.length,
-            };
-             // For mock, we pass the true showtimeData. The SeatSelector's own logic should handle
-            // rendering selected seats as selectable again.
             setEffectiveShowtimeForSelector(showtimeData);
 
           } else {
             setError("Invalid booking modification request or booking not found.");
-            setEffectiveShowtimeForSelector(showtimeData); // Fallback
+            setEffectiveShowtimeForSelector(showtimeData); 
           }
         } else {
           setEffectiveShowtimeForSelector(showtimeData);
@@ -150,16 +142,20 @@ function BookingPageContents() {
           variant: "default"
         });
       } else {
-        const bookingData: Omit<Booking, 'id' | 'bookingTime' | 'totalPrice'> = {
+        // Ensure theatreId is available for creating a new booking
+        if (!selectedShowtime.theatreId) {
+          throw new Error("Theatre ID is missing for the selected showtime.");
+        }
+        const bookingPayload: Omit<Booking, 'id' | 'bookingTime' | 'totalPrice' | 'theatreName'> = {
           userId: user.id,
           movieId: movie.id,
           movieTitle: movie.title,
           showtimeId: selectedShowtime.id,
           showtimeDateTime: selectedShowtime.dateTime,
-          theatreName: selectedShowtime.theatreName,
+          theatreId: selectedShowtime.theatreId, // Pass theatreId
           selectedSeats,
         };
-        await createBooking(bookingData);
+        await createBooking(bookingPayload);
         toast({
           title: "Booking Successful!",
           description: `Your tickets for ${movie.title} are confirmed.`,
@@ -202,8 +198,10 @@ function BookingPageContents() {
   if (!movie || !selectedShowtime || !effectiveShowtimeForSelector) {
     return <p className="text-center text-muted-foreground">Movie or showtime details not available.</p>;
   }
-
-  const totalPrice = selectedSeats.length * 15; // Assuming $15 per ticket
+  
+  // Ensure theatreName is available on selectedShowtime (it should be populated by getMovieById)
+  const displayTheatreName = selectedShowtime.theatreName || "Theatre Information Unavailable";
+  const totalPrice = selectedSeats.length * 15; 
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -218,7 +216,7 @@ function BookingPageContents() {
             {isModifyMode ? `Modify Seats for ${movie.title}` : `Book Tickets for ${movie.title}`}
           </CardTitle>
           <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1 text-md">
-            <span className="flex items-center"><MapPin size={16} className="mr-1 text-accent" /> {selectedShowtime.theatreName}</span>
+            <span className="flex items-center"><MapPin size={16} className="mr-1 text-accent" /> {displayTheatreName}</span>
             <span className="flex items-center"><CalendarDays size={16} className="mr-1 text-accent" /> {formatDate(selectedShowtime.dateTime)}</span>
             <span className="flex items-center"><Clock size={16} className="mr-1 text-accent" /> {formatTime(selectedShowtime.dateTime)}</span>
           </CardDescription>
@@ -228,7 +226,6 @@ function BookingPageContents() {
             showtime={effectiveShowtimeForSelector} 
             selectedSeats={selectedSeats} 
             onSeatSelect={handleSeatSelect}
-            // If modifying, maxSeats is fixed to original booking's seat count. Otherwise, default (e.g., 5).
             maxSeats={isModifyMode && originalSeatCount > 0 ? originalSeatCount : 5} 
           />
            {isModifyMode && originalSeatCount > 0 && (

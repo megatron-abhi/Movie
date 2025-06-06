@@ -1,5 +1,12 @@
-import type { Movie, Showtime, Booking, User } from './types';
+
+import type { Movie, Showtime, Booking, User, Theatre, TheatreFormData } from './types';
 import { format } from 'date-fns';
+
+let theatresStore: Theatre[] = [
+  { id: 'th1', name: 'Cineplex Odeon Downtown', location: '123 Main St' },
+  { id: 'th2', name: 'Grand Cinema Hall Complex', location: '456 Film Ave' },
+  { id: 'th3', name: 'IMAX Experience Centre', location: '789 Projection Blvd' },
+];
 
 let moviesStore: Movie[] = [
   {
@@ -14,8 +21,8 @@ let moviesStore: Movie[] = [
     cast: ['Leonardo DiCaprio', 'Joseph Gordon-Levitt', 'Elliot Page'],
     rating: 4.8,
     showtimes: [
-      { id: 'st1-1', dateTime: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(), theatreName: 'Cineplex Odeon', availableSeats: 50, totalSeats: 100 },
-      { id: 'st1-2', dateTime: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), theatreName: 'Grand Cinema Hall', availableSeats: 30, totalSeats: 80 },
+      { id: 'st1-1', dateTime: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(), theatreId: 'th1', availableSeats: 50, totalSeats: 100 },
+      { id: 'st1-2', dateTime: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), theatreId: 'th2', availableSeats: 30, totalSeats: 80 },
     ],
   },
   {
@@ -30,7 +37,7 @@ let moviesStore: Movie[] = [
     cast: ['Keanu Reeves', 'Laurence Fishburne', 'Carrie-Anne Moss'],
     rating: 4.7,
     showtimes: [
-      { id: 'st2-1', dateTime: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(), theatreName: 'Cineplex Odeon', availableSeats: 60, totalSeats: 100 },
+      { id: 'st2-1', dateTime: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(), theatreId: 'th1', availableSeats: 60, totalSeats: 100 },
     ],
   },
   {
@@ -45,7 +52,7 @@ let moviesStore: Movie[] = [
     cast: ['Matthew McConaughey', 'Anne Hathaway', 'Jessica Chastain'],
     rating: 4.9,
     showtimes: [
-      { id: 'st3-1', dateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), theatreName: 'IMAX Experience', availableSeats: 100, totalSeats: 150 },
+      { id: 'st3-1', dateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), theatreId: 'th3', availableSeats: 100, totalSeats: 150 },
     ],
   }
 ];
@@ -57,27 +64,85 @@ let usersStore: User[] = [
   { id: 'admin1', username: 'admin', role: 'admin' },
 ];
 
-// Movie Management
-export const getMovies = async (): Promise<Movie[]> => {
-  // Simulate API delay
+// Theatre Management
+export const getTheatres = async (): Promise<Theatre[]> => {
+  await new Promise(resolve => setTimeout(resolve, 50));
+  return JSON.parse(JSON.stringify(theatresStore));
+};
+
+export const getTheatreById = async (id: string): Promise<Theatre | undefined> => {
+  await new Promise(resolve => setTimeout(resolve, 50));
+  return JSON.parse(JSON.stringify(theatresStore.find(t => t.id === id)));
+}
+
+export const addTheatre = async (theatreData: TheatreFormData): Promise<Theatre> => {
   await new Promise(resolve => setTimeout(resolve, 100));
-  return JSON.parse(JSON.stringify(moviesStore)); // Deep copy to prevent direct state mutation
+  const newTheatre: Theatre = {
+    ...theatreData,
+    id: String(Date.now() + Math.random()),
+  };
+  theatresStore.push(newTheatre);
+  return JSON.parse(JSON.stringify(newTheatre));
+};
+
+export const deleteTheatre = async (id: string): Promise<{ success: boolean, message?: string }> => {
+  await new Promise(resolve => setTimeout(resolve, 100));
+  // Check if any movie showtime uses this theatre
+  const isTheatreInUse = moviesStore.some(movie => 
+    movie.showtimes.some(showtime => showtime.theatreId === id)
+  );
+
+  if (isTheatreInUse) {
+    return { success: false, message: "Cannot delete theatre. It is currently assigned to one or more movie showtimes." };
+  }
+
+  const initialLength = theatresStore.length;
+  theatresStore = theatresStore.filter(theatre => theatre.id !== id);
+  return { success: theatresStore.length < initialLength };
+};
+
+
+// Movie Management
+const populateShowtimeTheatreNames = (showtimes: Showtime[]): Showtime[] => {
+  return showtimes.map(st => {
+    const theatre = theatresStore.find(t => t.id === st.theatreId);
+    return {
+      ...st,
+      theatreName: theatre ? theatre.name : 'Unknown Theatre',
+    };
+  });
+};
+
+export const getMovies = async (): Promise<Movie[]> => {
+  await new Promise(resolve => setTimeout(resolve, 100));
+  const moviesWithPopulatedShowtimes = moviesStore.map(movie => ({
+    ...movie,
+    showtimes: populateShowtimeTheatreNames(movie.showtimes),
+  }));
+  return JSON.parse(JSON.stringify(moviesWithPopulatedShowtimes));
 };
 
 export const getMovieById = async (id: string): Promise<Movie | undefined> => {
   await new Promise(resolve => setTimeout(resolve, 50));
-  return JSON.parse(JSON.stringify(moviesStore.find(movie => movie.id === id)));
+  const movie = moviesStore.find(movie => movie.id === id);
+  if (!movie) return undefined;
+  const movieWithPopulatedShowtimes = {
+    ...movie,
+    showtimes: populateShowtimeTheatreNames(movie.showtimes),
+  };
+  return JSON.parse(JSON.stringify(movieWithPopulatedShowtimes));
 };
 
-export const addMovie = async (movieData: Omit<Movie, 'id'>): Promise<Movie> => {
+export const addMovie = async (movieData: Omit<Movie, 'id' | 'posterUrl'> & { posterUrl?: string }): Promise<Movie> => {
   await new Promise(resolve => setTimeout(resolve, 100));
   const newMovie: Movie = { 
     ...movieData, 
     id: String(Date.now() + Math.random()),
+    posterUrl: movieData.posterUrl || `https://placehold.co/400x600.png?text=${encodeURIComponent(movieData.title)}`,
     showtimes: movieData.showtimes.map((st, index) => ({
       ...st,
-      id: `st-${movieData.id || Date.now()}-${index}`, // ensure unique showtime id
-      availableSeats: st.totalSeats, // initially all seats available
+      id: `st-${movieData.id || Date.now()}-${index}`, 
+      availableSeats: st.totalSeats, 
     }))
   };
   moviesStore.push(newMovie);
@@ -88,8 +153,13 @@ export const updateMovie = async (id: string, movieData: Partial<Omit<Movie, 'id
   await new Promise(resolve => setTimeout(resolve, 100));
   const movieIndex = moviesStore.findIndex(movie => movie.id === id);
   if (movieIndex === -1) return undefined;
-  moviesStore[movieIndex] = { ...moviesStore[movieIndex], ...movieData };
-  // If showtimes are part of movieData, ensure they get new IDs if they don't have one or are new
+  
+  moviesStore[movieIndex] = { 
+    ...moviesStore[movieIndex], 
+    ...movieData,
+    posterUrl: movieData.posterUrl || moviesStore[movieIndex].posterUrl || `https://placehold.co/400x600.png?text=${encodeURIComponent(moviesStore[movieIndex].title)}`,
+   };
+
   if (movieData.showtimes) {
     moviesStore[movieIndex].showtimes = movieData.showtimes.map((st, index) => ({
       ...st,
@@ -109,33 +179,33 @@ export const deleteMovie = async (id: string): Promise<boolean> => {
 
 
 // Booking Management
-export const createBooking = async (bookingData: Omit<Booking, 'id' | 'bookingTime' | 'totalPrice'>): Promise<Booking> => {
+export const createBooking = async (bookingData: Omit<Booking, 'id' | 'bookingTime' | 'totalPrice' | 'theatreName'>): Promise<Booking> => {
   await new Promise(resolve => setTimeout(resolve, 100));
-  const movie = await getMovieById(bookingData.movieId);
+  const movie = await getMovieById(bookingData.movieId); // This will have populated showtimes
   if (!movie) throw new Error('Movie not found');
   const showtime = movie.showtimes.find(st => st.id === bookingData.showtimeId);
   if (!showtime) throw new Error('Showtime not found');
+  if (!showtime.theatreName) throw new Error('Theatre name missing for showtime.');
+
 
   if (showtime.availableSeats < bookingData.selectedSeats.length) {
     throw new Error('Not enough seats available');
   }
   
-  // In a real app, this would be a transactional update.
-  // For mock, directly update the moviesStore.
-  const movieIndex = moviesStore.findIndex(m => m.id === movie.id);
-  if (movieIndex !== -1) {
-    const showtimeIndex = moviesStore[movieIndex].showtimes.findIndex(st => st.id === showtime.id);
-    if (showtimeIndex !== -1) {
-      moviesStore[movieIndex].showtimes[showtimeIndex].availableSeats -= bookingData.selectedSeats.length;
+  const movieIndexOriginal = moviesStore.findIndex(m => m.id === movie.id);
+  if (movieIndexOriginal !== -1) {
+    const showtimeIndexOriginal = moviesStore[movieIndexOriginal].showtimes.findIndex(st => st.id === showtime.id);
+    if (showtimeIndexOriginal !== -1) {
+      moviesStore[movieIndexOriginal].showtimes[showtimeIndexOriginal].availableSeats -= bookingData.selectedSeats.length;
     }
   }
-
 
   const newBooking: Booking = {
     ...bookingData,
     id: String(Date.now() + Math.random()),
     bookingTime: new Date().toISOString(),
-    totalPrice: bookingData.selectedSeats.length * 15, // Assume $15 per ticket
+    totalPrice: bookingData.selectedSeats.length * 15, 
+    theatreName: showtime.theatreName, // Get populated theatreName
   };
   bookingsStore.push(newBooking);
   return JSON.parse(JSON.stringify(newBooking));
@@ -143,7 +213,21 @@ export const createBooking = async (bookingData: Omit<Booking, 'id' | 'bookingTi
 
 export const getBookingById = async (bookingId: string): Promise<Booking | undefined> => {
   await new Promise(resolve => setTimeout(resolve, 50));
-  return JSON.parse(JSON.stringify(bookingsStore.find(b => b.id === bookingId)));
+  const booking = bookingsStore.find(b => b.id === bookingId);
+  if (!booking) return undefined;
+  
+  // Ensure theatreName is populated if it wasn't (e.g. older bookings before refactor)
+  // This part is mostly for robustness if data could be inconsistent.
+  // For newly created bookings, theatreName is already set.
+  if (!booking.theatreName && booking.theatreId) {
+      const theatre = await getTheatreById(booking.theatreId);
+      if (theatre) {
+          booking.theatreName = theatre.name;
+      } else {
+          booking.theatreName = "Unknown Theatre";
+      }
+  }
+  return JSON.parse(JSON.stringify(booking));
 };
 
 export const modifyBookingSeats = async (bookingId: string, userId: string, newSeats: string[]): Promise<Booking | null> => {
@@ -158,14 +242,8 @@ export const modifyBookingSeats = async (bookingId: string, userId: string, newS
     throw new Error("The number of seats must remain the same when modifying.");
   }
 
-  // In a real system, you'd also verify that the newSeats are available for the showtime
-  // and atomically update showtime seat availability. For this mock, we assume the
-  // SeatSelector component has already validated this based on current availability
-  // (excluding the user's original seats). The availableSeats count in moviesStore
-  // does not change as the number of tickets held by the user is constant.
-
   bookingsStore[bookingIndex].selectedSeats = newSeats;
-  bookingsStore[bookingIndex].bookingTime = new Date().toISOString(); // Update booking time to reflect modification
+  bookingsStore[bookingIndex].bookingTime = new Date().toISOString(); 
 
   return JSON.parse(JSON.stringify(bookingsStore[bookingIndex]));
 };
@@ -173,12 +251,28 @@ export const modifyBookingSeats = async (bookingId: string, userId: string, newS
 
 export const getUserBookings = async (userId: string): Promise<Booking[]> => {
   await new Promise(resolve => setTimeout(resolve, 100));
-  return JSON.parse(JSON.stringify(bookingsStore.filter(booking => booking.userId === userId)));
+  const userBookings = bookingsStore.filter(booking => booking.userId === userId);
+  // Populate theatre names for display if necessary
+  const populatedUserBookings = await Promise.all(userBookings.map(async b => {
+    if (!b.theatreName && b.theatreId) {
+      const theatre = await getTheatreById(b.theatreId);
+      return { ...b, theatreName: theatre ? theatre.name : "Unknown Theatre" };
+    }
+    return b;
+  }));
+  return JSON.parse(JSON.stringify(populatedUserBookings));
 };
 
 export const getAllBookings = async (): Promise<Booking[]> => {
   await new Promise(resolve => setTimeout(resolve, 100));
-  return JSON.parse(JSON.stringify(bookingsStore));
+   const populatedBookings = await Promise.all(bookingsStore.map(async b => {
+    if (!b.theatreName && b.theatreId) {
+      const theatre = await getTheatreById(b.theatreId);
+      return { ...b, theatreName: theatre ? theatre.name : "Unknown Theatre" };
+    }
+    return b;
+  }));
+  return JSON.parse(JSON.stringify(populatedBookings));
 }
 
 export const cancelBooking = async (bookingId: string, userId: string): Promise<boolean> => {
@@ -188,15 +282,13 @@ export const cancelBooking = async (bookingId: string, userId: string): Promise<
 
   const booking = bookingsStore[bookingIndex];
   
-  // Restore seats to moviesStore
-  const movieIndex = moviesStore.findIndex(m => m.id === booking.movieId);
-  if (movieIndex !== -1) {
-    const showtimeIndex = moviesStore[movieIndex].showtimes.findIndex(st => st.id === booking.showtimeId);
-    if (showtimeIndex !== -1) {
-      moviesStore[movieIndex].showtimes[showtimeIndex].availableSeats += booking.selectedSeats.length;
-      // Ensure availableSeats does not exceed totalSeats
-      if (moviesStore[movieIndex].showtimes[showtimeIndex].availableSeats > moviesStore[movieIndex].showtimes[showtimeIndex].totalSeats) {
-        moviesStore[movieIndex].showtimes[showtimeIndex].availableSeats = moviesStore[movieIndex].showtimes[showtimeIndex].totalSeats;
+  const movieIndexOriginal = moviesStore.findIndex(m => m.id === booking.movieId);
+  if (movieIndexOriginal !== -1) {
+    const showtimeIndexOriginal = moviesStore[movieIndexOriginal].showtimes.findIndex(st => st.id === booking.showtimeId);
+    if (showtimeIndexOriginal !== -1) {
+      moviesStore[movieIndexOriginal].showtimes[showtimeIndexOriginal].availableSeats += booking.selectedSeats.length;
+      if (moviesStore[movieIndexOriginal].showtimes[showtimeIndexOriginal].availableSeats > moviesStore[movieIndexOriginal].showtimes[showtimeIndexOriginal].totalSeats) {
+        moviesStore[movieIndexOriginal].showtimes[showtimeIndexOriginal].availableSeats = moviesStore[movieIndexOriginal].showtimes[showtimeIndexOriginal].totalSeats;
       }
     }
   }
@@ -205,22 +297,31 @@ export const cancelBooking = async (bookingId: string, userId: string): Promise<
   return true;
 };
 
-
-// User Management (Simplified)
 export const findUserByUsername = async (username: string): Promise<User | undefined> => {
   await new Promise(resolve => setTimeout(resolve, 50));
   return JSON.parse(JSON.stringify(usersStore.find(user => user.username === username)));
 };
 
-// Helper to format date for display
 export const formatDate = (dateString: string, formatString: string = 'MMMM d, yyyy') => {
-  return format(new Date(dateString), formatString);
+  try {
+    return format(new Date(dateString), formatString);
+  } catch (e) {
+    return "Invalid Date";
+  }
 };
 
 export const formatTime = (dateString: string) => {
-  return format(new Date(dateString), 'h:mm a');
+   try {
+    return format(new Date(dateString), 'h:mm a');
+  } catch (e) {
+    return "Invalid Time";
+  }
 };
 
 export const formatDateTime = (dateString: string) => {
-  return format(new Date(dateString), 'MMMM d, yyyy h:mm a');
+   try {
+    return format(new Date(dateString), 'MMMM d, yyyy h:mm a');
+  } catch (e) {
+    return "Invalid Date/Time";
+  }
 }

@@ -1,8 +1,9 @@
+
 "use client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Film, Ticket, Users, LayoutDashboard } from "lucide-react";
+import { Film, Ticket, Users, LayoutDashboard, Building } from "lucide-react";
 import { useAuth } from "@/context/auth-context";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -27,7 +28,7 @@ export default function AdminDashboardPage() {
         <h1 className="text-4xl font-headline text-primary flex items-center">
             <LayoutDashboard size={36} className="mr-3 text-accent"/> Admin Dashboard
         </h1>
-        <p className="text-lg text-muted-foreground font-body mt-1">Manage movies, bookings, and site settings.</p>
+        <p className="text-lg text-muted-foreground font-body mt-1">Manage movies, theatres, bookings, and site settings.</p>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -48,6 +49,20 @@ export default function AdminDashboardPage() {
         <Card className="hover:shadow-lg transition-shadow">
           <CardHeader>
             <CardTitle className="font-headline text-2xl flex items-center">
+              <Building size={24} className="mr-2 text-primary" /> Manage Theatres
+            </CardTitle>
+            <CardDescription>Add, edit, or delete theatre locations.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Link href="/admin/theatres">
+              <Button className="w-full bg-primary hover:bg-primary/90">Go to Theatre Management</Button>
+            </Link>
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-lg transition-shadow">
+          <CardHeader>
+            <CardTitle className="font-headline text-2xl flex items-center">
               <Ticket size={24} className="mr-2 text-primary" /> View All Bookings
             </CardTitle>
             <CardDescription>Oversee all ticket bookings made by users.</CardDescription>
@@ -59,7 +74,6 @@ export default function AdminDashboardPage() {
           </CardContent>
         </Card>
         
-        {/* Placeholder for future features */}
         <Card className="hover:shadow-lg transition-shadow opacity-50 cursor-not-allowed">
           <CardHeader>
             <CardTitle className="font-headline text-2xl flex items-center">

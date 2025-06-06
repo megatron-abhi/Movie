@@ -1,9 +1,10 @@
+
 "use client";
 import { useEffect, useState } from 'react';
 import type { Booking } from '@/lib/types';
 import { getAllBookings, formatDateTime } from '@/lib/data';
 import { useAuth } from '@/context/auth-context';
-import { Loader2, Ticket, AlertCircle, UserCircle, FilmIcon } from 'lucide-react';
+import { Loader2, Ticket, AlertCircle, UserCircle, FilmIcon, BuildingIcon } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -30,7 +31,7 @@ export default function AdminAllBookingsPage() {
         setIsLoading(true);
         setError(null);
         try {
-          const data = await getAllBookings();
+          const data = await getAllBookings(); // This now populates theatreName if missing
           data.sort((a, b) => new Date(b.bookingTime).getTime() - new Date(a.bookingTime).getTime());
           setBookings(data);
         } catch (err) {
@@ -94,7 +95,7 @@ export default function AdminAllBookingsPage() {
                     <TableRow key={booking.id}>
                       <TableCell className="font-medium flex items-center gap-2"><UserCircle size={16}/>{booking.userId}</TableCell>
                       <TableCell className="flex items-center gap-2"><FilmIcon size={16}/>{booking.movieTitle}</TableCell>
-                      <TableCell>{booking.theatreName}</TableCell>
+                      <TableCell className="flex items-center gap-2"><BuildingIcon size={16}/>{booking.theatreName || 'N/A'}</TableCell>
                       <TableCell>{formatDateTime(booking.showtimeDateTime)}</TableCell>
                       <TableCell>{booking.selectedSeats.join(', ')}</TableCell>
                       <TableCell>{formatDateTime(booking.bookingTime)}</TableCell>

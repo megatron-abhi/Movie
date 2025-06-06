@@ -1,8 +1,9 @@
+
 "use client";
 import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { Button } from '@/components/ui/button';
-import { Clapperboard, UserCircle, LogOut, LayoutDashboard, Ticket, Film } from 'lucide-react';
+import { Clapperboard, UserCircle, LogOut, LayoutDashboard, Ticket, Film, Building } from 'lucide-react';
 
 export default function AppHeader() {
   const { user, logout } = useAuth();
@@ -34,6 +35,9 @@ export default function AppHeader() {
                   </Link>
                   <Link href="/admin/movies" className="text-sm hover:text-accent transition-colors flex items-center gap-1">
                     <Film size={18} /> Manage Movies
+                  </Link>
+                  <Link href="/admin/theatres" className="text-sm hover:text-accent transition-colors flex items-center gap-1">
+                    <Building size={18} /> Manage Theatres
                   </Link>
                    <Link href="/admin/bookings" className="text-sm hover:text-accent transition-colors flex items-center gap-1">
                     <Ticket size={18} /> All Bookings

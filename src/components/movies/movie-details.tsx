@@ -1,15 +1,16 @@
+
 "use client";
 import type { Movie, Showtime } from '@/lib/types';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Calendar, Clock, Star, Users, Video, Tag, Ticket, ChevronRight } from 'lucide-react';
-import { formatDate, formatTime, formatDateTime } from '@/lib/data';
+import { Calendar, Clock, Star, Video, Tag, Ticket, ChevronRight, MapPin } from 'lucide-react'; // Added MapPin
+import { formatDate, formatTime } from '@/lib/data'; // Removed formatDateTime as it's not used here directly for showtime cards
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface MovieDetailsProps {
-  movie: Movie;
+  movie: Movie; // Movie object already has showtimes with populated theatreName
 }
 
 export default function MovieDetailsClient({ movie }: MovieDetailsProps) {
@@ -90,7 +91,9 @@ export default function MovieDetailsClient({ movie }: MovieDetailsProps) {
                     <Link key={showtime.id} href={`/movies/${movie.id}/book?showtimeId=${showtime.id}`}>
                       <Button variant="outline" className="w-full h-auto p-3 flex flex-col items-start text-left hover:bg-accent/10 hover:border-accent transition-all duration-200">
                         <div className="font-semibold text-lg">{formatTime(showtime.dateTime)}</div>
-                        <div className="text-sm text-muted-foreground">{showtime.theatreName}</div>
+                        <div className="text-sm text-muted-foreground flex items-center">
+                           <MapPin size={14} className="mr-1" /> {showtime.theatreName || 'N/A'}
+                        </div>
                         <div className={`text-xs mt-1 ${showtime.availableSeats > 10 ? 'text-green-400' : 'text-red-400'}`}>
                           {showtime.availableSeats} seats left
                         </div>

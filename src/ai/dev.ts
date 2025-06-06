@@ -1,4 +1,4 @@
 import { config } from 'dotenv';
 config();
 
-import '@/ai/flows/movie-recommendations.ts';
+// Removed import for movie-recommendations.ts as the file is now empty/deleted

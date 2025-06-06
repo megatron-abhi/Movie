@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useAuth } from '@/context/auth-context';
 import { Button } from '@/components/ui/button';
-import { Clapperboard, UserCircle, LogOut, LayoutDashboard, Ticket, Film, Sparkles } from 'lucide-react';
+import { Clapperboard, UserCircle, LogOut, LayoutDashboard, Ticket, Film } from 'lucide-react';
 
 export default function AppHeader() {
   const { user, logout } = useAuth();
@@ -24,9 +24,6 @@ export default function AppHeader() {
                   </Link>
                   <Link href="/bookings" className="text-sm hover:text-accent transition-colors flex items-center gap-1">
                     <Ticket size={18} /> My Bookings
-                  </Link>
-                  <Link href="/recommendations" className="text-sm hover:text-accent transition-colors flex items-center gap-1">
-                    <Sparkles size={18} /> Recommendations
                   </Link>
                 </>
               )}
